@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive 3D model of a 5x10 cargo trailer camper conversion.">
+<style>html,body{margin:0;font-family:system-ui,-apple-system,sans-serif}[hidden]{display:none!important}</style>
+<title>Our Camper in 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Manrope:wght@400;600&display=swap">
+<style>
+/* Layout: one-screen app. Title strip, full-bleed 3D stage, control dock that wraps on phones. */
+:root {
+  --bg: #EEF1EC;
+  --surface: #FFFFFF;
+  --fg: #1D2A26;
+  --muted: #5B6A64;
+  --line: #D3DBD6;
+  --chip: #E2E9E5;
+  --accent: #2F5D50;
+  --accent-fg: #FFFFFF;
+  --stage: #1B2836;
+  --label-bg: rgba(16, 24, 22, 0.86);
+  --label-fg: #F3F1EA;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111917; --surface: #18221F; --fg: #EDF2EF; --muted: #9AAAA3; --line: #2B3834;
+    --chip: #222E2A; --accent: #8FC1A9; --accent-fg: #0F1F1A; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111917; --surface: #18221F; --fg: #EDF2EF; --muted: #9AAAA3; --line: #2B3834;
+  --chip: #222E2A; --accent: #8FC1A9; --accent-fg: #0F1F1A; color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); }
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.top {
+  padding-block: 14px 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
+}
+.top h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(1.4rem, 2.6vw, 2rem); letter-spacing: -0.01em; text-wrap: balance; }
+.top p { margin: 2px 0 0; color: var(--muted); font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.top-actions { display: flex; gap: 8px; }
+.ghost {
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  font: inherit; font-weight: 600; font-size: 0.85rem; padding: 8px 14px; border-radius: 999px; cursor: pointer; min-height: 38px;
+}
+.ghost[aria-pressed="true"] { background: var(--chip); }
+#stage { position: relative; min-height: 0; overflow: hidden; background: var(--stage); touch-action: none; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+#labels { position: absolute; inset: 0; pointer-events: none; }
+.lbl {
+  position: absolute; left: 0; top: 0; white-space: nowrap;
+  background: var(--label-bg); color: var(--label-fg);
+  font-size: 0.78rem; font-weight: 600; padding: 5px 10px; border-radius: 999px;
+}
+.lbl::after {
+  content: ""; position: absolute; left: 50%; bottom: -5px; width: 2px; height: 5px;
+  background: var(--label-bg); transform: translateX(-50%);
+}
+.hint {
+  position: absolute; right: max(12px, env(safe-area-inset-right, 0px)); bottom: 12px;
+  color: var(--label-fg); background: var(--label-bg); font-size: 0.78rem; padding: 6px 12px; border-radius: 999px;
+}
+.dock {
+  padding-block: 12px max(12px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--surface); border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
+}
+.grp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.grp-name { font-size: 0.7rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); font-weight: 600; min-width: 3.6em; }
+.seg { display: inline-flex; background: var(--chip); border-radius: 999px; padding: 3px; }
+.seg button {
+  border: 0; background: transparent; color: var(--fg); font: inherit; font-weight: 600; font-size: 0.85rem;
+  padding: 8px 13px; border-radius: 999px; cursor: pointer; min-height: 38px;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 520px) {
+  .hint { display: none; }
+  .grp-name { min-width: 0; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Our camper</h1>
+      <p>5 × 10 ft cargo trailer · 67 in inside · 5 × 5 ft ramp deck</p>
+    </div>
+    <div class="top-actions">
+      <button class="ghost" id="labelsBtn" type="button" aria-pressed="true">Labels</button>
+      <button class="ghost" id="resetBtn" type="button">Reset view</button>
+    </div>
+  </header>
+
+  <div id="stage" aria-label="3D model of the camper. Drag to turn it, scroll or pinch to zoom." role="img">
+    <div id="labels"></div>
+    <div class="hint">Drag to turn · scroll or pinch to zoom</div>
+  </div>
+
+  <nav class="dock" aria-label="Model options">
+    <div class="grp"><span class="grp-name" id="g-ramp">Ramp</span>
+      <div class="seg" role="group" aria-labelledby="g-ramp">
+        <button type="button" data-k="ramp" data-v="deck" aria-pressed="true">Deck down</button>
+        <button type="button" data-k="ramp" data-v="closed" aria-pressed="false">Closed for travel</button>
+      </div>
+    </div>
+    <div class="grp"><span class="grp-name" id="g-inside">Inside</span>
+      <div class="seg" role="group" aria-labelledby="g-inside">
+        <button type="button" data-k="inside" data-v="night" aria-pressed="true">Bed</button>
+        <button type="button" data-k="inside" data-v="day" aria-pressed="false">Sofa + desk</button>
+      </div>
+    </div>
+    <div class="grp"><span class="grp-name" id="g-view">View</span>
+      <div class="seg" role="group" aria-labelledby="g-view">
+        <button type="button" data-k="view" data-v="outside" aria-pressed="true">Outside</button>
+        <button type="button" data-k="view" data-v="cutaway" aria-pressed="false">See inside</button>
+      </div>
+    </div>
+    <div class="grp"><span class="grp-name" id="g-sky">Sky</span>
+      <div class="seg" role="group" aria-labelledby="g-sky">
+        <button type="button" data-k="sky" data-v="evening" aria-pressed="true">Evening</button>
+        <button type="button" data-k="sky" data-v="day" aria-pressed="false">Daytime</button>
+      </div>
+    </div>
+  </nav>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+  const state = { ramp: 'deck', inside: 'night', view: 'outside', sky: 'evening', labels: true };
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const stage = document.getElementById('stage');
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  stage.insertBefore(renderer.domElement, stage.firstChild);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x1B2836);
+  scene.fog = new THREE.Fog(0x1B2836, 55, 170);
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 500);
+  const TARGET = V(1.6, 3.4, 0);
+  const HOME = V(16, 8.6, 17.5);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.minDistance = 7;
+  controls.maxDistance = 48;
+  controls.maxPolarAngle = Math.PI / 2 - 0.04;
+  controls.target.copy(TARGET);
+  controls.autoRotate = !reduced;
+  controls.autoRotateSpeed = 0.5;
+  controls.addEventListener('start', () => { controls.autoRotate = false; });
+
+  function homePosition() {
+    const aspect = stage.clientWidth / Math.max(1, stage.clientHeight);
+    const f = aspect < 0.8 ? 1.75 : aspect < 1.2 ? 1.3 : 1;
+    return TARGET.clone().add(HOME.clone().sub(TARGET).multiplyScalar(f));
+  }
+
+  const M = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.8, metalness: 0 }, o || {}));
+  const mat = {
+    skin: M(0xEDEFEA, { roughness: 0.45, metalness: 0.2 }),
+    trim: M(0x2B302E, { roughness: 0.6 }),
+    steel: M(0x3A3F3D, { roughness: 0.5, metalness: 0.4 }),
+    floor: M(0x857E72),
+    ply: M(0xD6C7A8),
+    panel: M(0xC4A272),
+    glass: M(0x3D4A52, { roughness: 0.15, metalness: 0.1, emissive: 0xFFB35C, emissiveIntensity: 0.85 }),
+    sky: M(0xA9C4CF, { roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.85, emissive: 0xFFB35C, emissiveIntensity: 0.6 }),
+    door: M(0x2F5D50, { roughness: 0.55 }),
+    deck: M(0x5E5345),
+    tile: M(0x8C7A62),
+    tire: M(0x1C1D1D, { roughness: 0.9 }),
+    rim: M(0xBFC5C2, { roughness: 0.35, metalness: 0.6 }),
+    duvet: M(0x6E879C),
+    sheet: M(0xF1ECE2),
+    pillow: M(0xF7F3EA),
+    track: M(0x9AA3A0, { metalness: 0.6, roughness: 0.4 }),
+    awning: M(0xC98F35, { side: THREE.DoubleSide, roughness: 0.9 }),
+    stripe: M(0xF1E3C4, { side: THREE.DoubleSide, roughness: 0.9 }),
+    chair: M(0x2F5D50),
+    frame: M(0x222625, { metalness: 0.5, roughness: 0.5 }),
+    bulb: M(0xFFF2D6, { emissive: 0xFFC06A, emissiveIntensity: 1.2 }),
+    grass: M(0x26351F, { roughness: 1 }),
+    gravel: M(0x4A4740, { roughness: 1 }),
+    box: M(0x2B302E, { roughness: 0.55, metalness: 0.2 }),
+    binA: M(0xB86F4C), binB: M(0x8FB3A2), binC: M(0xE2C46F),
+    ac: M(0xDCDDD8, { roughness: 0.5 }),
+    gen: M(0xE5C21E, { roughness: 0.5 }),
+    solar: M(0x1D2B4A, { roughness: 0.3, metalness: 0.3 }),
+    heater: M(0xB8402F, { roughness: 0.6 }),
+    jug: M(0x6FA8DC, { roughness: 0.3, transparent: true, opacity: 0.8 }),
+    lightPanel: M(0xFFF6E5, { emissive: 0xFFD9A0, emissiveIntensity: 1 }),
+    trunk: M(0x4B3A2C), pine: M(0x1B2A22, { roughness: 1 }),
+    white: M(0xF4F4F0, { roughness: 0.4 })
+  };
+
+  const root = new THREE.Group(); scene.add(root);
+  function add(o, parent) { o.castShadow = true; o.receiveShadow = true; (parent || root).add(o); return o; }
+  function box(w, h, d, m, x, y, z, parent) {
+    const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); return add(o, parent);
+  }
+  function cyl(r, h, m, x, y, z, parent, seg) {
+    const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, seg || 20), m); o.position.set(x, y, z); return add(o, parent);
+  }
+  const UP = V(0, 1, 0);
+  function bar(a, b, r, m, parent) {
+    const d = b.clone().sub(a);
+    const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.length(), 10), m);
+    o.position.copy(a).addScaledVector(d, 0.5);
+    o.quaternion.setFromUnitVectors(UP, d.clone().normalize());
+    return add(o, parent);
+  }
+
+  // Dimensions in feet. x = length (front is -x), y = up, z = width (curbside is +z).
+  const XF = -5.0, XR = 5.15, ZW = 2.8, Y0 = 1.45, YF = 1.6, YT = 7.25, H = YT - Y0, XFW = 4.75;
+  const LEN = XR - XF, XM = (XF + XR) / 2;
+
+  const curbWall = new THREE.Group(); root.add(curbWall);
+  const roofG = new THREE.Group(); root.add(roofG);
+
+  // Ground, gravel pad, trees, stars
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(420, 420), mat.grass);
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+  const pad = new THREE.Mesh(new THREE.CircleGeometry(15, 48), mat.gravel);
+  pad.rotation.x = -Math.PI / 2; pad.position.set(2.5, 0.01, 0); pad.receiveShadow = true; scene.add(pad);
+  [[-20, -15, 1.1], [-27, 7, 1.3], [23, -18, 1.2], [29, 11, 1.0], [-11, -26, 1.4], [8, -29, 1.25], [33, -5, 1.15], [-30, -4, 0.9], [14, 24, 1.1]].forEach(([x, z, s]) => {
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); scene.add(g);
+    cyl(0.3, 2, mat.trunk, 0, 1, 0, g, 8);
+    const c1 = new THREE.Mesh(new THREE.ConeGeometry(2.2, 5, 10), mat.pine); c1.position.y = 4; add(c1, g);
+    const c2 = new THREE.Mesh(new THREE.ConeGeometry(1.6, 4, 10), mat.pine); c2.position.y = 6.6; add(c2, g);
+  });
+  const starGeo = new THREE.BufferGeometry();
+  const starPos = [];
+  for (let i = 0; i < 500; i++) {
+    const u = Math.random() * Math.PI * 2, v = 0.12 + Math.random() * 0.85;
+    starPos.push(160 * Math.cos(u) * Math.cos(v), 160 * Math.sin(v), 160 * Math.sin(u) * Math.cos(v));
+  }
+  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+  const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xFFFFFF, size: 1.6, sizeAttenuation: false, fog: false }));
+  scene.add(stars);
+
+  // Chassis, axle, wheels, fenders
+  box(LEN, 0.3, 0.22, mat.steel, XM, 1.3, -2.3);
+  box(LEN, 0.3, 0.22, mat.steel, XM, 1.3, 2.3);
+  box(LEN, 0.15, ZW * 2, mat.trim, XM, Y0 + 0.075, 0);
+  bar(V(0.6, 1.12, -3.2), V(0.6, 1.12, 3.2), 0.12, mat.steel);
+  [-1, 1].forEach(s => {
+    const t = cyl(1.12, 0.75, mat.tire, 0.6, 1.12, s * 3.2, root, 28); t.rotation.x = Math.PI / 2;
+    const r = cyl(0.6, 0.79, mat.rim, 0.6, 1.12, s * 3.2, root, 20); r.rotation.x = Math.PI / 2;
+    box(2.9, 0.08, 0.95, mat.trim, 0.6, 2.36, s * 3.2, s > 0 ? curbWall : root);
+  });
+
+  // Tongue, coupler, jack, tongue box
+  bar(V(XF, 1.3, -2.1), V(XF - 4.4, 1.3, 0), 0.12, mat.steel);
+  bar(V(XF, 1.3, 2.1), V(XF - 4.4, 1.3, 0), 0.12, mat.steel);
+  box(0.8, 0.35, 0.42, mat.steel, XF - 4.65, 1.35, 0);
+  cyl(0.09, 1.3, mat.steel, XF - 3.4, 0.75, 0.6);
+  box(0.4, 0.06, 0.4, mat.steel, XF - 3.4, 0.05, 0.6);
+  box(2.0, 1.0, 1.15, mat.box, XF - 1.6, 1.95, 0);
+  box(2.04, 0.05, 1.19, mat.trim, XF - 1.6, 2.47, 0);
+  [-0.4, 0, 0.4].forEach(dx => box(0.25, 0.05, 0.02, mat.rim, XF - 1.6 + dx, 2.15, 0.58));
+
+  // Body shell
+  box(0.12, H, ZW * 2, mat.skin, XF + 0.06, Y0 + H / 2, 0);
+  box(0.04, 5.5, 5.3, mat.ply, XF + 0.15, YF + 2.75, 0);
+  box(LEN, H, 0.1, mat.skin, XM, Y0 + H / 2, -ZW + 0.05);
+  box(LEN - 0.3, 5.5, 0.04, mat.ply, XM, YF + 2.75, -ZW + 0.14);
+  box(LEN, H, 0.1, mat.skin, XM, Y0 + H / 2, ZW - 0.05, curbWall);
+  box(LEN - 0.3, 5.5, 0.04, mat.ply, XM, YF + 2.75, ZW - 0.14, curbWall);
+  box(LEN - 0.2, 0.02, ZW * 2 - 0.25, mat.floor, XM, YF + 0.01, 0);
+  box(LEN + 0.15, 0.16, ZW * 2 + 0.12, mat.skin, XM, YT + 0.08, 0, roofG);
+  box(LEN - 0.3, 0.03, ZW * 2 - 0.3, mat.ply, XM, YT - 0.13, 0, roofG);
+  [[XF, -ZW, root], [XF, ZW, root], [XR - 0.1, -ZW + 0.1, root], [XR - 0.1, ZW - 0.1, root]].forEach(([x, z, p]) => box(0.16, H, 0.16, mat.trim, x, Y0 + H / 2, z, p));
+  box(0.2, 0.22, ZW * 2, mat.trim, XR - 0.1, YT - 0.06, 0);
+  box(LEN, 0.1, 0.06, mat.trim, XM, YT, -ZW - 0.02, roofG);
+  box(LEN, 0.1, 0.06, mat.trim, XM, YT, ZW + 0.02, roofG);
+  box(LEN, 0.18, 0.06, mat.trim, XM, Y0 + 0.4, -ZW - 0.03);
+  box(LEN, 0.18, 0.06, mat.trim, XM, Y0 + 0.4, ZW + 0.03, curbWall);
+
+  // Side windows, two per side
+  [-2.4, 2.4].forEach(x => [-1, 1].forEach(s => {
+    const p = s > 0 ? curbWall : root;
+    box(2.2, 1.45, 0.22, mat.trim, x, 5.1, s * 2.725, p);
+    box(2.0, 1.25, 0.26, mat.glass, x, 5.1, s * 2.725, p);
+  }));
+
+  // Roof fan and ceiling lights
+  const FANX = XF + 0.15 + 2.0, SKYX = XF + 0.15 + 8.17;
+  box(1.3, 0.3, 1.3, mat.white, FANX, YT + 0.31, 0, roofG);
+  box(1.0, 0.12, 1.0, mat.trim, FANX, YT + 0.51, 0, roofG);
+  cyl(0.32, 0.04, mat.lightPanel, -1.4, YT - 0.16, 0, roofG);
+  cyl(0.32, 0.04, mat.lightPanel, 1.95, YT - 0.16, 0, roofG);
+
+  // Skylight at the rear of the roof, over the entry: 22 in along the trailer, 14 in across
+  box(2.05, 0.14, 1.4, mat.trim, SKYX, YT + 0.22, 0, roofG);
+  box(1.83, 0.5, 1.17, mat.sky, SKYX, YT + 0.04, 0, roofG);
+  box(1.6, 0.1, 0.95, mat.sky, SKYX, YT + 0.33, 0, roofG);
+
+  // 12V rooftop AC/heater, 28 x 28 in, middle of the roof over the axle; ceiling panel inside
+  const AX = XF + 0.15 + 5.17;
+  box(2.36, 0.53, 2.36, mat.white, AX, YT + 0.43, 0, roofG);
+  box(2.0, 0.06, 1.6, mat.trim, AX, YT + 0.72, 0, roofG);
+  box(2.38, 0.08, 0.5, mat.trim, AX, YT + 0.3, 1.0, roofG);
+  box(1.83, 0.05, 1.46, mat.ac, AX, YT - 0.17, 0, roofG);
+
+  // Front window, high and centered, about 36 x 16 in
+  box(0.22, 1.5, 3.2, mat.trim, XF + 0.075, YF + 3.75, 0);
+  box(0.26, 1.33, 3.0, mat.glass, XF + 0.075, YF + 3.75, 0);
+
+  // Solar: side-wall port near the front, cable to a folding panel set out in the sun
+  box(0.35, 0.3, 0.06, mat.trim, XF + 1.0, 2.3, ZW + 0.03, curbWall);
+  const solar = new THREE.Group(); solar.position.set(-6.5, 0, 10.5); solar.rotation.y = -0.4; scene.add(solar);
+  const panel = box(3.2, 0.06, 2.2, mat.solar, 0, 1.0, 0, solar); panel.rotation.x = -0.75;
+  box(3.3, 0.04, 0.06, mat.rim, 0, 1.0, 0, solar).rotation.x = -0.75;
+  bar(V(-1.2, 0, 0.6), V(-1.2, 0.6, 0.1), 0.03, mat.frame, solar);
+  bar(V(1.2, 0, 0.6), V(1.2, 0.6, 0.1), 0.03, mat.frame, solar);
+  bar(V(-6.2, 0.05, 9.6), V(XF + 1.0, 0.05, ZW + 1.2), 0.03, mat.trim);
+  bar(V(XF + 1.0, 0.05, ZW + 1.2), V(XF + 1.0, 2.2, ZW + 0.08), 0.03, mat.trim);
+
+  // Generator, parked well away from the camper
+  const gen = new THREE.Group(); gen.position.set(-13, 0, -9); gen.rotation.y = 0.6; scene.add(gen);
+  box(1.6, 1.25, 0.95, mat.gen, 0, 0.66, 0, gen);
+  box(1.0, 0.12, 0.25, mat.trim, 0, 1.38, 0, gen);
+  box(0.03, 0.6, 0.6, mat.trim, 0.81, 0.62, 0, gen);
+
+  // Bolt-in false wall: window on the roadside half, door on the curbside half
+  const fwTop = YT - 0.13;
+  function fw(z0, z1, y0, y1) { return box(0.12, y1 - y0, z1 - z0, mat.skin, XFW, (y0 + y1) / 2, (z0 + z1) / 2); }
+  fw(-2.65, -2.2, YF, fwTop);
+  fw(-2.2, -0.2, YF, 4.6); fw(-2.2, -0.2, 6.1, fwTop);
+  box(0.18, 1.5, 2.0, mat.glass, XFW, 5.35, -1.2);
+  box(0.16, 1.62, 0.06, mat.trim, XFW, 5.35, -2.2); box(0.16, 1.62, 0.06, mat.trim, XFW, 5.35, -0.2);
+  fw(-0.2, 0.2, YF, fwTop);
+  const port = cyl(0.13, 0.1, mat.trim, XFW + 0.07, YF + 0.55, 0, root, 16); port.rotation.z = Math.PI / 2;
+  box(0.05, 0.22, 0.16, mat.trim, XFW + 0.08, YF + 1.0, 0);
+  fw(0.2, 2.2, YF + 4.9, fwTop);
+  box(0.14, 4.9, 2.0, mat.door, XFW + 0.01, YF + 2.45, 1.2);
+  box(0.18, 1.2, 0.9, mat.glass, XFW + 0.01, 5.0, 1.2);
+  box(0.1, 0.09, 0.32, mat.rim, XFW + 0.12, 3.9, 0.48);
+  fw(2.2, 2.65, YF, fwTop);
+  box(0.35, 0.06, 5.3, mat.trim, XFW + 0.15, fwTop - 0.02, 0);
+
+  // Ramp: hinged at the floor; rotation.z = 0 is the deck, PI/2 is closed
+  const rampPivot = new THREE.Group(); rampPivot.position.set(XR, YF, 0); root.add(rampPivot);
+  const RL = 5.5, RW = 5.3;
+  box(RL, 0.2, RW, mat.deck, RL / 2, -0.1, 0, rampPivot);
+  box(RL, 0.03, RW, mat.skin, RL / 2, -0.215, 0, rampPivot);
+  box(RL - 0.2, 0.04, RW - 0.2, mat.tile, RL / 2, 0.02, 0, rampPivot);
+  for (let i = 1; i < 5; i++) box(0.03, 0.045, RW - 0.2, mat.deck, 0.1 + i * (RL - 0.2) / 5, 0.025, 0, rampPivot);
+  for (let i = 1; i < 5; i++) box(RL - 0.2, 0.045, 0.03, mat.deck, RL / 2, 0.025, -RW / 2 + 0.1 + i * (RW - 0.2) / 5, rampPivot);
+  box(RL, 0.24, 0.08, mat.trim, RL / 2, -0.12, RW / 2, rampPivot);
+  box(RL, 0.24, 0.08, mat.trim, RL / 2, -0.12, -RW / 2, rampPivot);
+  rampPivot.rotation.z = 0;
+
+  // Deck extras: support legs, railing, step, chairs
+  const deck = new THREE.Group(); root.add(deck);
+  const XE = XR + RL, YD = YF + 0.04;
+  [-1, 1].forEach(s => {
+    cyl(0.08, YF - 0.25, mat.steel, XE - 0.35, (YF - 0.25) / 2 + 0.03, s * (RW / 2 - 0.35), deck, 10);
+    box(0.45, 0.06, 0.45, mat.steel, XE - 0.35, 0.03, s * (RW / 2 - 0.35), deck);
+  });
+  const railH = 2.6, rz = RW / 2 - 0.08;
+  [-1, 1].forEach(s => {
+    [XR + 1.6, XR + 3.3, XE - 0.12].forEach(x => bar(V(x, YD, s * rz), V(x, YD + railH, s * rz), 0.045, mat.frame, deck));
+    bar(V(XR + 1.6, YD + railH, s * rz), V(XE - 0.12, YD + railH, s * rz), 0.04, mat.frame, deck);
+    bar(V(XR + 1.6, YD + railH * 0.5, s * rz), V(XE - 0.12, YD + railH * 0.5, s * rz), 0.03, mat.frame, deck);
+    bar(V(XE - 0.12, YD, s * 0.95), V(XE - 0.12, YD + railH, s * 0.95), 0.045, mat.frame, deck);
+    bar(V(XE - 0.12, YD + railH, s * 0.95), V(XE - 0.12, YD + railH, s * rz), 0.04, mat.frame, deck);
+  });
+  box(1.0, 0.12, 1.8, mat.deck, XE + 0.55, 0.85, 0, deck);
+  [-0.75, 0.75].forEach(z => box(0.1, 0.8, 0.1, mat.frame, XE + 0.9, 0.4, z, deck));
+
+  function chair(x, z, ry) {
+    const g = new THREE.Group(); g.position.set(x, YD, z); g.rotation.y = ry; deck.add(g);
+    box(1.4, 0.1, 1.35, mat.chair, 0, 1.2, 0, g);
+    const back = box(1.4, 1.5, 0.1, mat.chair, 0, 1.95, -0.72, g); back.rotation.x = -0.2;
+    [-1, 1].forEach(s => {
+      bar(V(s * 0.68, 0, -0.62), V(s * 0.68, 1.2, 0.62), 0.035, mat.frame, g);
+      bar(V(s * 0.68, 0, 0.62), V(s * 0.68, 1.2, -0.62), 0.035, mat.frame, g);
+      box(0.1, 0.07, 1.25, mat.frame, s * 0.74, 1.72, 0.02, g);
+    });
+  }
+  chair(XR + 3.5, -1.35, Math.PI / 2 - 0.3);
+  chair(XR + 3.5, 1.35, Math.PI / 2 + 0.3);
+  cyl(0.38, 0.06, mat.frame, XR + 4.0, YD + 1.35, 0, deck, 20);
+  bar(V(XR + 4.0, YD, 0), V(XR + 4.0, YD + 1.33, 0), 0.04, mat.frame, deck);
+  cyl(0.09, 0.28, mat.lightPanel, XR + 4.0, YD + 1.52, 0, deck, 12);
+
+  // Portable diesel heater on the ground off the roadside deck corner, hose to the false-wall port
+  box(1.3, 0.8, 0.85, mat.heater, XR + 1.0, 0.42, -3.7, deck);
+  box(1.32, 0.06, 0.87, mat.trim, XR + 1.0, 0.84, -3.7, deck);
+  bar(V(XR + 1.3, 0.3, -4.1), V(XR + 1.6, 0.3, -5.0), 0.05, mat.steel, deck);
+  bar(V(XR + 0.8, 0.85, -3.4), V(XR + 0.35, YF + 0.15, -2.75), 0.11, mat.trim, deck);
+  bar(V(XR + 0.35, YF + 0.15, -2.75), V(XFW + 0.12, YF + 0.55, 0), 0.11, mat.trim, deck);
+
+  // Outdoor kitchen: folding table with a propane camp stove, out from under the awning
+  const ktch = new THREE.Group(); ktch.position.set(XR + 3.2, 0, 5.2); deck.add(ktch);
+  box(2.6, 0.06, 1.5, mat.panel, 0, 2.45, 0, ktch);
+  [[-1.2, -0.65], [1.2, -0.65], [-1.2, 0.65], [1.2, 0.65]].forEach(([x, z]) => box(0.06, 2.42, 0.06, mat.frame, x, 1.21, z, ktch));
+  box(1.4, 0.22, 0.85, mat.trim, -0.3, 2.59, 0, ktch);
+  cyl(0.5, 1.5, mat.white, 1.8, 0.75, 0.2, ktch, 18);
+
+  // Rear awning on a rail above the ramp seal, poles on the ground past the deck
+  const awn = new THREE.Group(); root.add(awn);
+  box(0.16, 0.16, 6.4, mat.trim, XR + 0.08, YT + 0.12, 0, awn);
+  const A = V(XR + 0.1, YT + 0.1, 0), B = V(XR + 7.4, YT - 0.75, 0);
+  const aLen = Math.hypot(B.x - A.x, B.y - A.y), aAng = Math.atan2(B.y - A.y, B.x - A.x);
+  const sheet = box(aLen, 0.04, 6.4, mat.awning, (A.x + B.x) / 2, (A.y + B.y) / 2, 0, awn);
+  sheet.rotation.z = aAng;
+  [-2.4, -0.8, 0.8, 2.4].forEach(z => box(aLen, 0.01, 0.6, mat.stripe, 0, -0.024, z, sheet));
+  box(0.05, 0.38, 6.4, mat.awning, B.x, B.y - 0.17, 0, awn);
+  [-1, 1].forEach(s => {
+    bar(V(B.x, 0, s * 3.1), V(B.x, B.y - 0.02, s * 3.1), 0.05, mat.frame, awn);
+    bar(V(B.x, B.y - 0.05, s * 3.1), V(B.x + 1.7, 0, s * 4.2), 0.012, mat.trim, awn);
+  });
+  const bulbs = [];
+  for (let i = 0; i <= 8; i++) {
+    const z = -3.0 + i * 0.75;
+    const y = B.y - 0.42 - 0.18 * Math.sin((i / 8) * Math.PI);
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), mat.bulb); b.position.set(B.x - 0.05, y, z); awn.add(b); bulbs.push(b);
+  }
+  for (let i = 0; i < bulbs.length - 1; i++) bar(bulbs[i].position.clone(), bulbs[i + 1].position.clone(), 0.008, mat.trim, awn);
+
+  // Interior: E-track, shelf, toilet cabinet, convertible bed
+  [YF + 0.83, YF + 2.55, YF + 4.33].forEach(y => {
+    box(9.3, 0.11, 0.03, mat.track, -0.2, y, -ZW + 0.17);
+    box(9.3, 0.11, 0.03, mat.track, -0.2, y, ZW - 0.17, curbWall);
+  });
+  box(4.6, 0.06, 0.75, mat.ply, -2.6, YF + 4.42, -ZW + 0.55);
+  box(4.6, 0.06, 0.75, mat.ply, -2.6, YF + 4.42, ZW - 0.55, curbWall);
+  [[-4.2, mat.binA], [-3.3, mat.binB], [-2.4, mat.binC], [-1.5, mat.binB]].forEach(([x, m]) => box(0.75, 0.55, 0.6, m, x, YF + 4.73, -ZW + 0.55));
+  // Wash corner: open sink stand on the roadside wall, toilet slides out underneath
+  const WZ = -1.87, WX0 = 1.45, WX1 = 4.6, WXM = (WX0 + WX1) / 2, CTR = YF + 2.83;
+  box(WX1 - WX0, 0.08, 1.5, mat.panel, WXM, CTR - 0.04, WZ);
+  box(WX1 - WX0, 0.05, 1.45, mat.panel, WXM, YF + 1.42, WZ);
+  [[WX0 + 0.05, WZ + 0.7], [WX1 - 0.05, WZ + 0.7], [WX0 + 0.05, WZ - 0.7], [WX1 - 0.05, WZ - 0.7], [3.9, WZ + 0.7]].forEach(([x, z]) => box(0.07, 2.8, 0.07, mat.frame, x, YF + 1.4, z));
+  box(1.1, 0.06, 1.0, mat.rim, 2.6, CTR + 0.02, WZ);
+  bar(V(2.6, CTR, -2.45), V(2.6, CTR + 0.45, -2.45), 0.035, mat.rim);
+  bar(V(2.6, CTR + 0.45, -2.45), V(2.6, CTR + 0.45, -2.1), 0.035, mat.rim);
+  box(1.2, 0.45, 0.9, mat.trim, 2.6, YF + 1.68, WZ - 0.15);
+  box(0.4, 0.3, 0.3, mat.ac, 3.45, YF + 1.6, -2.3);
+  box(1.13, 1.02, 1.25, mat.white, 2.6, YF + 0.56, WZ + 0.05);
+  box(1.3, 0.04, 1.4, mat.frame, 2.6, YF + 0.03, WZ + 0.05);
+  box(0.95, 1.0, 0.95, mat.white, 4.25, YF + 1.95, WZ);
+  box(0.85, 1.1, 0.7, mat.jug, 4.25, YF + 0.57, WZ);
+
+  const tweens = [];
+  function tw(obj, night, day) { tweens.push({ obj, night, day }); applyT(obj, state.inside === 'night' ? night : day, 1); }
+  function applyT(o, t, k) {
+    o.position.lerp(t.p, k);
+    o.rotation.x += ((t.rx || 0) - o.rotation.x) * k;
+    o.rotation.z += ((t.rz || 0) - o.rotation.z) * k;
+    const s = t.s === undefined ? 1 : t.s;
+    const cs = o.scale.x + (s - o.scale.x) * k;
+    o.scale.setScalar(Math.max(cs, 0.0001));
+    o.visible = cs > 0.03;
+  }
+
+  const segX = i => XF + 0.15 + 1.04 + 2.08 * i;
+  const beamX = [XF + 0.23, segX(1) - 1.04, segX(2) - 1.04, segX(2) + 1.04];
+  const beams = beamX.map(x => box(0.15, 0.3, 5.0, mat.panel, x, 2.25, 0));
+  tw(beams[0], { p: V(beamX[0], 2.25, 0) }, { p: V(beamX[0], 2.25, 0) });
+  tw(beams[1], { p: V(beamX[1], 2.25, 0) }, { p: V(beamX[1], 2.25, 0) });
+  tw(beams[2], { p: V(beamX[2], 2.25, 0) }, { p: V(-2.55, 4.02, 0) });
+  tw(beams[3], { p: V(beamX[3], 2.25, 0) }, { p: V(-0.65, 4.02, 0) });
+
+  const panels = [0, 1, 2].map(i => box(2.06, 0.06, 4.7, mat.panel, segX(i), 2.43, 0));
+  tw(panels[0], { p: V(segX(0), 2.43, 0) }, { p: V(segX(0), 2.43, 0) });
+  tw(panels[1], { p: V(segX(1), 2.43, 0) }, { p: V(-1.6, 4.2, 0) });
+  tw(panels[2], { p: V(segX(2), 2.43, 0) }, { p: V(0.9, YF + 2.42, -2.5), rx: Math.PI / 2 });
+
+  const segs = [0, 1, 2].map(i => {
+    const m = box(2.06, 0.5, 4.5, mat.sheet, segX(i), 2.71, 0);
+    box(2.08, 0.06, 4.54, mat.duvet, 0, 0.26, 0, m);
+    return m;
+  });
+  tw(segs[0], { p: V(segX(0), 2.71, 0) }, { p: V(XF + 0.42, 3.5, 0), rz: -Math.PI / 2 });
+  tw(segs[1], { p: V(segX(1), 2.71, 0) }, { p: V(-3.3, 2.71, 0) });
+  tw(segs[2], { p: V(segX(2), 2.71, 0) }, { p: V(-3.3, 3.21, 0) });
+
+  [-1, 1].forEach(s => {
+    const p = box(0.7, 0.25, 1.6, mat.pillow, -4.4, 3.08, s * 1.15);
+    tw(p, { p: V(-4.4, 3.08, s * 1.15) }, { p: V(-3.95, 3.82, s * 1.45), rz: -0.9 });
+  });
+
+  const laptop = new THREE.Group(); root.add(laptop);
+  box(1.0, 0.04, 0.7, mat.trim, 0, 0, 0, laptop);
+  const scr = box(1.0, 0.68, 0.03, mat.trim, 0, 0.33, -0.36, laptop); scr.rotation.x = -0.25;
+  laptop.rotation.y = Math.PI / 2;
+  tw(laptop, { p: V(-1.6, 4.25, 0.4), s: 0 }, { p: V(-1.6, 4.25, 0.4) });
+  const mug = cyl(0.12, 0.25, mat.binC, -1.2, 4.36, -1.1, root, 14);
+  tw(mug, { p: V(-1.2, 4.36, -1.1), s: 0 }, { p: V(-1.2, 4.36, -1.1) });
+
+  // Lights
+  const hemi = new THREE.HemisphereLight(0x5D7391, 0x1D2A22, 0.45); scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xA9BEDF, 0.3);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 90 });
+  sun.shadow.bias = -0.0006;
+  sun.target.position.set(2, 0, 0); scene.add(sun); scene.add(sun.target);
+  const cabin = new THREE.PointLight(0xFFC27A, 1.5, 7.5, 1); cabin.position.set(-0.5, 6.4, 0); scene.add(cabin);
+  const porch = new THREE.PointLight(0xFFB56B, 1.2, 13, 1); porch.position.set(XR + 4, 6.0, 0); scene.add(porch);
+
+  function applySky() {
+    const n = state.sky === 'evening';
+    const bg = n ? 0x1B2836 : 0xC6DDE3;
+    scene.background.set(bg); scene.fog.color.set(bg);
+    stage.style.background = n ? '#1B2836' : '#C6DDE3';
+    hemi.color.set(n ? 0x5D7391 : 0xE6F2F5); hemi.groundColor.set(n ? 0x1D2A22 : 0x5B6B45); hemi.intensity = n ? 0.45 : 0.8;
+    sun.color.set(n ? 0xA9BEDF : 0xFFF1DC); sun.intensity = n ? 0.32 : 0.95;
+    sun.position.set(n ? 18 : -16, 30, n ? -14 : 20);
+    mat.glass.emissiveIntensity = n ? 0.85 : 0; mat.glass.color.set(n ? 0x3D4A52 : 0x7C93A0);
+    mat.sky.emissiveIntensity = n ? 0.6 : 0; mat.sky.color.set(n ? 0x55636B : 0xBBD6E0);
+    mat.bulb.emissiveIntensity = n ? 1.2 : 0.08;
+    mat.lightPanel.emissiveIntensity = n ? 1 : 0;
+    mat.grass.color.set(n ? 0x26351F : 0x6F8A4E);
+    mat.gravel.color.set(n ? 0x4A4740 : 0x9C958A);
+    mat.pine.color.set(n ? 0x1B2A22 : 0x2F4A3A);
+    stars.visible = n;
+    cabin.intensity = n ? 1.5 : 0.35;
+  }
+
+  function applyView() {
+    const cut = state.view === 'cutaway';
+    curbWall.visible = !cut; roofG.visible = !cut;
+  }
+
+  // Labels projected from 3D points
+  const labelLayer = document.getElementById('labels');
+  const labels = [
+    { t: 'Bed / sofa + desk', p: V(-2.6, 4.9, 0.6), when: () => state.view === 'cutaway' },
+    { t: 'Sink + toilet', p: V(2.6, 5.0, -1.6), when: () => state.view === 'cutaway' },
+    { t: 'Water heater', p: V(4.25, 4.0, -1.6), when: () => state.view === 'cutaway' },
+    { t: 'E-track: 3 rows', p: V(1.2, YF + 4.6, -ZW + 0.2), when: () => state.view === 'cutaway' },
+    { t: 'Door + window', p: V(XFW + 0.1, 6.95, 0.2), when: () => state.ramp === 'deck' },
+    { t: '5 × 5 ft deck', p: V(XR + 2.0, 2.3, -1.6), when: () => state.ramp === 'deck' },
+    { t: 'Rear awning', p: V(XR + 5.4, YT - 0.2, 0), when: () => state.ramp === 'deck' },
+    { t: 'Battery box', p: V(XF - 1.6, 2.75, 0), when: () => true },
+    { t: 'Roof fan', p: V(FANX, YT + 0.9, 0), when: () => state.view === 'outside' },
+    { t: 'Skylight', p: V(SKYX, YT + 0.75, 0), when: () => state.view === 'outside' },
+    { t: 'Rooftop AC/heater', p: V(AX, YT + 1.1, 0), when: () => state.view === 'outside' },
+    { t: 'Front window', p: V(XF - 0.1, YF + 4.7, 0), when: () => state.view === 'outside' },
+    { t: 'Solar panel in the sun', p: V(-6.5, 2.4, 10.5), when: () => true },
+    { t: 'Diesel heater', p: V(XR + 1.0, 1.4, -3.7), when: () => state.ramp === 'deck' },
+    { t: 'Camp stove', p: V(XR + 2.9, 3.2, 5.2), when: () => state.ramp === 'deck' },
+    { t: 'Generator, well away', p: V(-13, 1.6, -9), when: () => true },
+    { t: '2 windows each side', p: V(-2.4, 6.05, ZW + 0.1), when: () => state.view === 'outside' }
+  ].map(L => { const el = document.createElement('div'); el.className = 'lbl'; el.textContent = L.t; el.hidden = true; labelLayer.appendChild(el); return Object.assign(L, { el }); });
+  const tmp = V(0, 0, 0);
+  function updateLabels() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    for (const L of labels) {
+      if (!state.labels || !L.when()) { L.el.hidden = true; continue; }
+      tmp.copy(L.p).project(camera);
+      if (tmp.z > 1 || Math.abs(tmp.x) > 1.1 || Math.abs(tmp.y) > 1.1) { L.el.hidden = true; continue; }
+      L.el.hidden = false;
+      L.el.style.transform = `translate(${(tmp.x * 0.5 + 0.5) * w}px, ${(-tmp.y * 0.5 + 0.5) * h - 6}px) translate(-50%, -100%)`;
+    }
+  }
+
+  // Controls
+  document.querySelectorAll('.seg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const k = btn.dataset.k, v = btn.dataset.v;
+      state[k] = v;
+      document.querySelectorAll(`.seg button[data-k="${k}"]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+      if (k === 'sky') applySky();
+      if (k === 'view') applyView();
+      if (k === 'inside' && state.view === 'outside') {
+        state.view = 'cutaway'; applyView();
+        document.querySelectorAll('.seg button[data-k="view"]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === 'cutaway')));
+      }
+    });
+  });
+  const labelsBtn = document.getElementById('labelsBtn');
+  labelsBtn.addEventListener('click', () => { state.labels = !state.labels; labelsBtn.setAttribute('aria-pressed', String(state.labels)); });
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    camera.position.copy(homePosition()); controls.target.copy(TARGET); controls.update();
+  });
+
+  function resize() {
+    const w = Math.max(1, stage.clientWidth), h = Math.max(1, stage.clientHeight);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  resize();
+  camera.position.copy(homePosition());
+  controls.update();
+  applySky(); applyView();
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const k = reduced ? 1 : 1 - Math.exp(-dt * 5);
+    const ta = state.ramp === 'deck' ? 0 : Math.PI / 2;
+    rampPivot.rotation.z += (ta - rampPivot.rotation.z) * k;
+    const deckShown = state.ramp === 'deck' && rampPivot.rotation.z < 0.12;
+    deck.visible = deckShown; awn.visible = deckShown;
+    porch.intensity = deckShown && state.sky === 'evening' ? 1.2 : 0;
+    const mode = state.inside;
+    for (const t of tweens) applyT(t.obj, mode === 'night' ? t.night : t.day, k);
+    controls.update();
+    renderer.render(scene, camera);
+    updateLabels();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
